@@ -1,113 +1,246 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as mqtt from 'mqtt';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { MqttClient, connect } from 'mqtt';
+import { mqttConfigs } from './mqtt.config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+interface MqttClientState {
+	client: MqttClient;
+	reconnectAttempts: number;
+	topics: string[];
+}
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
+	private clientStates: Record<string, MqttClientState> = {};
 	private readonly logger = new Logger(MqttService.name);
-	private client: mqtt.MqttClient | null = null;
-	private readonly subscriptions = new Map<string, (topic: string, message: Buffer) => void>();
+	private readonly maxReconnectAttempts = 5;
+	private readonly reconnectInterval = 5000; // 5 секунд
 
-	constructor(private readonly configService: ConfigService) {}
+	constructor(private eventEmitter: EventEmitter2) { }
 
 	async onModuleInit() {
-		const brokerUrl = this.configService.get<string>('MQTT_BROKER_URL', 'mqtt://localhost:1883');
-		const username = this.configService.get<string>('MQTT_USERNAME');
-		const password = this.configService.get<string>('MQTT_PASSWORD');
-
-		const options: mqtt.IClientOptions = {
-			clientId: `gsp-heating-server-${Date.now()}`,
-			clean: true,
-			connectTimeout: 4000,
-			reconnectPeriod: 1000,
-		};
-
-		if (username && password) {
-			options.username = username;
-			options.password = password;
-		}
-
-		try {
-			this.client = mqtt.connect(brokerUrl, options);
-
-			this.client.on('connect', () => {
-				this.logger.log('Connected to MQTT broker');
-			});
-
-			this.client.on('error', (error) => {
-				this.logger.error('MQTT connection error:', error);
-			});
-
-			this.client.on('message', (topic, message) => {
-				const handler = this.subscriptions.get(topic);
-				if (handler) {
-					handler(topic, message);
-				}
-			});
-
-			this.client.on('reconnect', () => {
-				this.logger.log('Reconnecting to MQTT broker...');
-			});
-
-		} catch (error) {
-			this.logger.error('Failed to connect to MQTT broker:', error);
-		}
+		await this.connectToAllBrokers();
 	}
 
 	async onModuleDestroy() {
-		if (this.client) {
-			await this.client.end();
-			this.logger.log('Disconnected from MQTT broker');
+		await this.disconnectAll();
+	}
+
+	private async connectToAllBrokers() {
+		for (const [name, config] of Object.entries(mqttConfigs)) {
+			await this.connectToBroker(name, config);
 		}
 	}
 
-	subscribe(topic: string, handler: (topic: string, message: Buffer) => void): void {
-		if (!this.client || !this.client.connected) {
-			this.logger.warn('MQTT client not connected, cannot subscribe to topic:', topic);
+	private async connectToBroker(
+		name: string,
+		config: (typeof mqttConfigs)[keyof typeof mqttConfigs],
+	) {
+		try {
+			const client = connect({
+				host: config.host,
+				port: config.port,
+				protocol: config.protocol,
+				clientId: config.clientId,
+				username: config.username,
+				password: config.password,
+				reconnectPeriod: 0, // Отключаем автоматическое переподключение
+			});
+
+			this.clientStates[name] = {
+				client,
+				reconnectAttempts: 0,
+				topics: [],
+			};
+
+			client.on('connect', () => {
+				this.logger.log(`Connected to MQTT broker "${name}" at ${config.host}:${config.port}`);
+				this.clientStates[name].reconnectAttempts = 0;
+				this.resubscribeToTopics(name);
+				this.eventEmitter.emit(`mqtt.${name}.connected`);
+			});
+
+			client.on('message', (topic, message) => {
+				this.handleMessage(name, topic, message);
+			});
+
+			client.on('error', (error) => {
+				this.logger.error(`MQTT ${name} error: ${error.message}`);
+				this.eventEmitter.emit(`mqtt.${name}.error`, error);
+			});
+
+			client.on('close', () => {
+				this.logger.warn(`MQTT connection closed for ${name}`);
+				this.handleReconnect(name, config);
+			});
+
+			client.on('offline', () => {
+				this.logger.warn(`MQTT client went offline for ${name}`);
+				this.handleReconnect(name, config);
+			});
+		} catch (error) {
+			this.logger.error(`Failed to connect to MQTT broker ${name}: ${error.message}`);
+		}
+	}
+
+	private handleMessage(brokerName: string, topic: string, message: Buffer) {
+		// Эмитируем событие для каждого сообщения
+		this.eventEmitter.emit(`mqtt.${brokerName}.message`, {
+			topic,
+			message: message.toString(),
+		});
+
+		// Эмитируем событие для конкретного топика
+		this.eventEmitter.emit(`mqtt.${brokerName}.topic.${topic}`, {
+			topic,
+			message: message.toString(),
+		});
+	}
+
+	private async handleReconnect(
+		name: string,
+		config: (typeof mqttConfigs)[keyof typeof mqttConfigs],
+	) {
+		const state = this.clientStates[name];
+		if (!state || state.reconnectAttempts >= this.maxReconnectAttempts) {
+			this.logger.error(`Max reconnect attempts reached for ${name}`);
 			return;
 		}
 
-		this.subscriptions.set(topic, handler);
-		this.client.subscribe(topic, (error) => {
+		state.reconnectAttempts++;
+		this.logger.log(`Reconnecting to ${name} (attempt ${state.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+		setTimeout(async () => {
+			await this.connectToBroker(name, config);
+		}, this.reconnectInterval);
+	}
+
+	private resubscribeToTopics(brokerName: string) {
+		const state = this.clientStates[brokerName];
+		if (!state || !state.client.connected) return;
+
+		for (const topic of state.topics) {
+			state.client.subscribe(topic, (error) => {
+				if (error) {
+					this.logger.error(`Failed to resubscribe to topic ${topic} on ${brokerName}: ${error.message}`);
+				} else {
+					this.logger.debug(`Resubscribed to topic ${topic} on ${brokerName}`);
+				}
+			});
+		}
+	}
+
+	subscribe(brokerName: string, topic: string) {
+		const state = this.clientStates[brokerName];
+		if (!state) {
+			this.logger.error(`Broker ${brokerName} not found`);
+			return;
+		}
+
+		if (!state.topics.includes(topic)) {
+			this.logger.log(`[MQTT] Subscribing to ${topic} on broker ${brokerName}`);
+			state.client.subscribe(topic, (err) => {
+				if (err) {
+					this.logger.error(`Failed to subscribe to ${topic} on ${brokerName}: ${err.message}`);
+				} else {
+					this.logger.log(`Successfully subscribed to ${topic} on ${brokerName}`);
+					state.topics.push(topic);
+				}
+			});
+		} else {
+			this.logger.debug(`Already subscribed to ${topic} on ${brokerName}`);
+		}
+	}
+
+	unsubscribe(topic: string, brokerName: string = 'heating') {
+		const state = this.clientStates[brokerName];
+		if (!state) {
+			this.logger.warn(`MQTT client "${brokerName}" not found`);
+			return;
+		}
+
+		// Удаляем топик из списка для переподписки
+		const index = state.topics.indexOf(topic);
+		if (index > -1) {
+			state.topics.splice(index, 1);
+		}
+
+		state.client.unsubscribe(topic, (error) => {
 			if (error) {
-				this.logger.error(`Failed to subscribe to topic ${topic}:`, error);
+				this.logger.error(`Failed to unsubscribe from topic "${topic}" on broker "${brokerName}": ${error.message}`);
 			} else {
-				this.logger.log(`Subscribed to topic: ${topic}`);
+				this.logger.debug(`Unsubscribed from topic "${topic}" on broker "${brokerName}"`);
+			}
+		});
+
+		// Отписываемся от события
+		this.eventEmitter.removeAllListeners(`mqtt.${brokerName}.topic.${topic}`);
+	}
+
+	publish(
+		brokerName: string,
+		topic: string,
+		message: string | Record<string, unknown> | boolean | number,
+		options: { retain?: boolean } = {},
+	) {
+		const state = this.clientStates[brokerName];
+		if (!state) {
+			this.logger.error(`Broker ${brokerName} not found`);
+			return;
+		}
+
+		if (!state.client.connected) {
+			this.logger.warn(`MQTT client "${brokerName}" not connected, cannot publish to topic: ${topic}`);
+			return;
+		}
+
+		// Преобразуем сообщение в строку
+		let payload: string;
+		if (typeof message === 'boolean') {
+			payload = message ? '1' : '0';
+		} else if (typeof message === 'object') {
+			payload = JSON.stringify(message);
+		} else {
+			payload = String(message);
+		}
+
+		state.client.publish(topic, payload, { qos: 1, retain: options.retain || false }, (err) => {
+			if (err) {
+				this.logger.error(`Failed to publish to ${topic} on ${brokerName}: ${err.message}`);
+			} else {
+				this.logger.log(`✅ MQTT Published to "${topic}" on broker "${brokerName}": ${payload}`);
 			}
 		});
 	}
 
-	unsubscribe(topic: string): void {
-		if (!this.client || !this.client.connected) {
-			return;
-		}
-
-		this.subscriptions.delete(topic);
-		this.client.unsubscribe(topic, (error) => {
-			if (error) {
-				this.logger.error(`Failed to unsubscribe from topic ${topic}:`, error);
-			} else {
-				this.logger.log(`Unsubscribed from topic: ${topic}`);
-			}
-		});
+	isConnected(brokerName: string = 'heating'): boolean {
+		const state = this.clientStates[brokerName];
+		return state ? state.client.connected : false;
 	}
 
-	publish(topic: string, message: string | Buffer): void {
-		if (!this.client || !this.client.connected) {
-			this.logger.warn('MQTT client not connected, cannot publish to topic:', topic);
-			return;
-		}
-
-		this.client.publish(topic, message, (error) => {
-			if (error) {
-				this.logger.error(`Failed to publish to topic ${topic}:`, error);
-			} else {
-				this.logger.debug(`Published to topic: ${topic}, message: ${message}`);
+	getConnectedClients(): string[] {
+		const connected: string[] = [];
+		for (const [brokerName, state] of Object.entries(this.clientStates)) {
+			if (state.client.connected) {
+				connected.push(brokerName);
 			}
-		});
+		}
+		return connected;
 	}
 
-	isConnected(): boolean {
-		return this.client ? this.client.connected : false;
+	getBrokerConfigs() {
+		return mqttConfigs;
+	}
+
+	private async disconnectAll() {
+		for (const [brokerName, state] of Object.entries(this.clientStates)) {
+			try {
+				await state.client.endAsync();
+				this.logger.log(`Disconnected from MQTT broker "${brokerName}"`);
+			} catch (error) {
+				this.logger.error(`Error disconnecting from MQTT broker "${brokerName}": ${error.message}`);
+			}
+		}
+		this.clientStates = {};
 	}
 }

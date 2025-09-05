@@ -10,7 +10,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Device } from '../devices/interfaces/device.interface';
 import { Logger } from '@nestjs/common';
 import { HeatingState } from '../devices/interfaces/heating.interface';
-import { TemperatureSensorData } from '../devices/interfaces/temperature-sensor.interface';
 
 @WebSocketGateway({
 	cors: {
@@ -35,17 +34,14 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		this.eventEmitter.on('heating.setpoint.changed', (data: { heatingId: string; temperature: number }) =>
 			this.handleHeatingSetpointUpdate(data),
 		);
-		this.eventEmitter.on('heating.pump.speed.changed', (data: { heatingId: string; speed: number }) =>
-			this.handleHeatingPumpSpeedUpdate(data),
-		);
 		this.eventEmitter.on('heating.valve.state.changed', (data: { heatingId: string; action: string; state: string }) =>
 			this.handleHeatingValveUpdate(data),
 		);
-		this.eventEmitter.on('heating.alarm', (data: { heatingId: string; isAlarm: boolean }) =>
-			this.handleHeatingAlarm(data),
-		);
 		this.eventEmitter.on('heating.emergency.stop', (data: { heatingId: string }) =>
 			this.handleHeatingEmergencyStop(data),
+		);
+		this.eventEmitter.on('heating.emergency.stop.reset', (data: { heatingId: string }) =>
+			this.handleHeatingEmergencyStopReset(data),
 		);
 		this.eventEmitter.on('heating.auto.control.enabled', (data: { heatingId: string }) =>
 			this.handleHeatingAutoControlEnabled(data),
@@ -53,10 +49,8 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		this.eventEmitter.on('heating.auto.control.disabled', (data: { heatingId: string }) =>
 			this.handleHeatingAutoControlDisabled(data),
 		);
-
-		// События датчиков температуры
-		this.eventEmitter.on('temperature.sensor.updated', (data: { sensorId: string; data: TemperatureSensorData }) =>
-			this.handleTemperatureSensorUpdate(data),
+		this.eventEmitter.on('heating.pid.updated', (data: { heatingId: string; error: number; output: number }) =>
+			this.handleHeatingPIDUpdate(data),
 		);
 	}
 
@@ -104,14 +98,6 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		});
 	}
 
-	private handleHeatingPumpSpeedUpdate(data: { heatingId: string; speed: number }) {
-		// Отправляем обновление скорости насоса
-		this.server.emit('heating:pump:speed:changed', {
-			heatingId: data.heatingId,
-			speed: data.speed,
-			timestamp: new Date().toISOString(),
-		});
-	}
 
 	private handleHeatingValveUpdate(data: { heatingId: string; action: string; state: string }) {
 		// Отправляем обновление состояния клапана
@@ -123,15 +109,6 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		});
 	}
 
-	private handleHeatingAlarm(data: { heatingId: string; isAlarm: boolean }) {
-		// Отправляем аварийное сообщение
-		this.server.emit('heating:alarm', {
-			heatingId: data.heatingId,
-			isAlarm: data.isAlarm,
-			severity: 'high',
-			timestamp: new Date().toISOString(),
-		});
-	}
 
 	private handleHeatingEmergencyStop(data: { heatingId: string }) {
 		// Отправляем сообщение об аварийной остановке
@@ -158,14 +135,21 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		});
 	}
 
-	private handleTemperatureSensorUpdate(data: { sensorId: string; data: TemperatureSensorData }) {
-		// Отправляем обновление данных датчика температуры
-		this.server.emit('temperature:sensor:updated', {
-			sensorId: data.sensorId,
-			temperature: data.data.temperature,
-			humidity: data.data.humidity,
-			pressure: data.data.pressure,
-			timestamp: data.data.timestamp,
+	private handleHeatingPIDUpdate(data: { heatingId: string; error: number; output: number }) {
+		// Отправляем обновление PID регулятора
+		this.server.emit('heating:pid:updated', {
+			heatingId: data.heatingId,
+			error: data.error,
+			output: data.output,
+			timestamp: new Date().toISOString(),
+		});
+	}
+
+	private handleHeatingEmergencyStopReset(data: { heatingId: string }) {
+		// Отправляем сообщение о сбросе аварийной остановки
+		this.server.emit('heating:emergency:stop:reset', {
+			heatingId: data.heatingId,
+			timestamp: new Date().toISOString(),
 		});
 	}
 

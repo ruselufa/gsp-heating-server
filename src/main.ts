@@ -15,7 +15,7 @@ async function bootstrap() {
 		credentials: true,
 	});
 
-	const port = process.env.PORT ?? 3001; // Используем другой порт для отопления
+	const port = process.env.PORT ?? 3007; // Используем другой порт для отопления
 	await app.listen(port);
 	logger.log(`Heating Server is running on: http://localhost:${port}`);
 }

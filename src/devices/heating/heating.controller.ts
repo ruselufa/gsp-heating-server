@@ -42,17 +42,14 @@ export class HeatingController {
 						this.heatingService.setTemperature(heatingId, parameters.temperature);
 					}
 					break;
-				case 'set_pump_speed':
-					if (parameters?.pumpSpeed !== undefined) {
-						this.heatingService.setPumpSpeed(heatingId, parameters.pumpSpeed);
-					}
-					break;
-				case 'set_valve':
-					if (parameters?.valvePosition !== undefined) {
-						const action = parameters.valvePosition > 0 ? 'open' : 'close';
-						this.heatingService.setValve(heatingId, action);
-					}
-					break;
+							case 'set_pump_speed':
+				if (parameters?.pumpSpeed !== undefined) {
+					this.heatingService.setFanSpeed(heatingId, parameters.pumpSpeed);
+				}
+				break;
+			case 'set_valve':
+				// Управление клапаном отключено - используется сезонная логика
+				break;
 				default:
 					return { success: false, message: `Unknown command: ${command}` };
 			}
@@ -93,23 +90,26 @@ export class HeatingController {
 		}
 	}
 
-	@Post(':heatingId/pump-speed')
-	setPumpSpeed(@Param('heatingId') heatingId: string, @Body() body: { speed: number }) {
+	@Post(':heatingId/pid-parameters')
+	setPIDParameters(@Param('heatingId') heatingId: string, @Body() body: { Kp?: number; Ki?: number; Kd?: number }) {
 		try {
-			this.heatingService.setPumpSpeed(heatingId, body.speed);
-			return { success: true, message: `Pump speed set to ${body.speed} for heating ${heatingId}` };
+			this.heatingService.setPIDParameters(heatingId, body.Kp, body.Ki, body.Kd);
+			return { success: true, message: `PID parameters updated for heating ${heatingId}` };
 		} catch (error) {
-			return { success: false, message: `Error setting pump speed: ${error.message}` };
+			return { success: false, message: `Error setting PID parameters: ${error.message}` };
 		}
 	}
 
-	@Post(':heatingId/valve')
-	setValve(@Param('heatingId') heatingId: string, @Body() body: { action: 'open' | 'close' }) {
+	@Get(':heatingId/pid-parameters')
+	getPIDParameters(@Param('heatingId') heatingId: string) {
 		try {
-			this.heatingService.setValve(heatingId, body.action);
-			return { success: true, message: `Valve ${body.action} command sent for heating ${heatingId}` };
+			const params = this.heatingService.getPIDParameters(heatingId);
+			if (!params) {
+				return { success: false, message: 'Heating system not found' };
+			}
+			return { success: true, data: params };
 		} catch (error) {
-			return { success: false, message: `Error controlling valve: ${error.message}` };
+			return { success: false, message: `Error getting PID parameters: ${error.message}` };
 		}
 	}
 
@@ -130,6 +130,25 @@ export class HeatingController {
 			return { success: true, message: `Emergency stop reset for heating ${heatingId}` };
 		} catch (error) {
 			return { success: false, message: `Error resetting emergency stop: ${error.message}` };
+		}
+	}
+
+	@Post(':heatingId/test-mqtt')
+	testMqtt(@Param('heatingId') heatingId: string, @Body() body: { fanSpeed?: number; valveOpen?: boolean; testTopic?: string; testValue?: string }) {
+		try {
+			// Если указан тестовый топик, отправляем прямую MQTT команду
+			if (body.testTopic && body.testValue !== undefined) {
+				this.heatingService.testMqttCommand(body.testTopic, body.testValue);
+				return { success: true, message: `Test MQTT command sent to topic: ${body.testTopic}, value: ${body.testValue}` };
+			}
+
+			if (body.fanSpeed !== undefined) {
+				this.heatingService.setFanSpeed(heatingId, body.fanSpeed);
+			}
+			// Управление клапаном отключено - используется сезонная логика
+			return { success: true, message: `Test MQTT commands sent for heating ${heatingId}` };
+		} catch (error) {
+			return { success: false, message: `Error sending test MQTT: ${error.message}` };
 		}
 	}
 }

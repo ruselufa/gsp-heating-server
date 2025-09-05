@@ -11,13 +11,11 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Device } from '../devices/interfaces/device.interface';
 import { Logger } from '@nestjs/common';
 import { HeatingService } from '../devices/heating/heating.service';
-import { TemperatureSensorService } from '../devices/temperature-sensor/temperature-sensor.service';
 import { heatingConfigs } from '../devices/heating/heating.config';
 
 interface ClientSubscription {
 	clientId: string;
 	heating: Set<string>;
-	temperatureSensors: Set<string>;
 	devices: Set<string>;
 }
 
@@ -43,7 +41,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 	constructor(
 		private readonly eventEmitter: EventEmitter2,
 		private readonly heatingService: HeatingService,
-		private readonly temperatureSensorService: TemperatureSensorService,
 	) {
 		// Подписываемся на события обновления устройств
 		this.eventEmitter.on('device.updated', (device: Device) => this.handleDeviceUpdate(device));
@@ -65,9 +62,14 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 			this.sendHeatingUpdate(data.heatingId),
 		);
 
-		// События датчиков температуры
-		this.eventEmitter.on('temperature.sensor.updated', (data: { sensorId: string; data: any }) =>
-			this.sendTemperatureSensorUpdate(data.sensorId),
+		// События PID регулятора
+		this.eventEmitter.on('heating.pid.updated', (data: { heatingId: string; error: number; output: number }) =>
+			this.sendHeatingUpdate(data.heatingId),
+		);
+		
+		// События сброса аварийной остановки
+		this.eventEmitter.on('heating.emergency.stop.reset', (data: { heatingId: string }) =>
+			this.sendHeatingUpdate(data.heatingId),
 		);
 	}
 
@@ -82,7 +84,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		this.clientSubscriptions.set(client.id, {
 			clientId: client.id,
 			heating: new Set(),
-			temperatureSensors: new Set(),
 			devices: new Set(),
 		});
 
@@ -120,9 +121,10 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 			const list = heatingIds.map(id => {
 				const state = this.heatingService.getState(id);
 				const config = heatingConfigs[id];
+				if (!state || !config) return null;
 				return {
 					heatingId: id,
-					name: config?.deviceRealName || id,
+					name: config.deviceRealName || id,
 					...state,
 				};
 			}).filter(item => item !== null);
@@ -131,29 +133,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		}
 	}
 
-	@SubscribeMessage('subscribeToTemperatureSensors')
-	handleTemperatureSensorSubscription(client: Socket, sensorIds: string[]) {
-		const subscription = this.clientSubscriptions.get(client.id);
-		if (subscription) {
-			subscription.temperatureSensors.clear();
-			sensorIds.forEach(id => subscription.temperatureSensors.add(id));
-			
-			this.logger.log(`Client ${client.id} subscribed to temperature sensors: ${sensorIds.join(', ')}`);
-			
-			client.emit('temperatureSensorSubscriptionConfirmed', { 
-				subscribedTo: sensorIds,
-				message: 'Temperature sensor subscription confirmed' 
-			});
-
-			// Отправляем текущие данные датчиков
-			const list = sensorIds.map(id => ({
-				sensorId: id,
-				...this.temperatureSensorService.getSensorData(id),
-			})).filter(item => item !== null);
-			
-			client.emit('temperatureSensors', list);
-		}
-	}
 
 	@SubscribeMessage('subscribeToDevices')
 	handleDeviceSubscription(client: Socket, deviceIds: string[]) {
@@ -176,7 +155,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		const subscription = this.clientSubscriptions.get(client.id);
 		if (subscription) {
 			subscription.heating.clear();
-			subscription.temperatureSensors.clear();
 			subscription.devices.clear();
 			
 			this.logger.log(`Client ${client.id} unsubscribed from all devices`);
@@ -191,7 +169,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		if (subscription) {
 			client.emit('subscriptions', {
 				heating: Array.from(subscription.heating),
-				temperatureSensors: Array.from(subscription.temperatureSensors),
 				devices: Array.from(subscription.devices),
 			});
 		}
@@ -215,18 +192,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		client.emit('heating', list);
 	}
 
-	@SubscribeMessage('getTemperatureSensors')
-	handleGetTemperatureSensors(client: Socket) {
-		const subs = this.clientSubscriptions.get(client.id);
-		if (!subs || subs.temperatureSensors.size === 0) return;
-		
-		const list = Array.from(subs.temperatureSensors).map(id => ({
-			sensorId: id,
-			...this.temperatureSensorService.getSensorData(id),
-		})).filter(item => item !== null);
-		
-		client.emit('temperatureSensors', list);
-	}
 
 	@SubscribeMessage('heating:command')
 	async handleHeatingCommand(client: Socket, payload: HeatingCommand) {
@@ -248,15 +213,12 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 					break;
 				case 'SET_PUMP_SPEED':
 					if (typeof value === 'number') {
-						this.heatingService.setPumpSpeed(heatingId, value);
+						this.heatingService.setFanSpeed(heatingId, value);
 					}
 					break;
 				case 'SET_VALVE':
-					if (value === 'OPEN') {
-						this.heatingService.setValve(heatingId, 'open');
-					} else if (value === 'CLOSE') {
-						this.heatingService.setValve(heatingId, 'close');
-					}
+					// Управление клапаном отключено - используется сезонная логика
+					this.logger.warn(`Manual valve control disabled for ${heatingId} - using seasonal logic`);
 					break;
 				case 'EMERGENCY_STOP':
 					this.heatingService.emergencyStop(heatingId);
@@ -294,16 +256,9 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 	@SubscribeMessage('getSystemStats')
 	handleGetSystemStats(client: Socket) {
 		const heatingStats = this.heatingService.getSystemStats();
-		const sensorStats = this.temperatureSensorService.getAllSensorData();
 		
 		client.emit('systemStats', {
 			heating: heatingStats,
-			temperatureSensors: {
-				total: Object.keys(sensorStats).length,
-				online: Object.values(sensorStats).filter(data => 
-					new Date().getTime() - data.timestamp.getTime() < 300000 // 5 минут
-				).length,
-			},
 			websocket: this.getSubscriptionsStats(),
 			timestamp: new Date().toISOString(),
 		});
@@ -314,9 +269,11 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		try {
 			const state = this.heatingService.getState(heatingId);
 			const config = heatingConfigs[heatingId];
+			if (!state || !config) return;
+			
 			const data = {
 				heatingId,
-				name: config?.deviceRealName || heatingId,
+				name: config.deviceRealName || heatingId,
 				...state,
 			};
 
@@ -332,28 +289,6 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		}
 	}
 
-	// Отправка обновлённых данных датчика температуры всем подписанным клиентам
-	private sendTemperatureSensorUpdate(sensorId: string) {
-		try {
-			const data = this.temperatureSensorService.getSensorData(sensorId);
-			if (!data) return;
-
-			const sensorData = {
-				sensorId,
-				...data,
-			};
-
-			this.clientSubscriptions.forEach((subscription, clientId) => {
-				if (subscription.temperatureSensors.has(sensorId)) {
-					const clientSocket = (this.server.sockets as any).get(clientId);
-					clientSocket?.emit('temperatureSensor:updated', sensorData);
-				}
-			});
-		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			this.logger.error(`Ошибка отправки обновления датчика температуры ${sensorId}: ${errorMessage}`);
-		}
-	}
 
 	private handleDeviceUpdate(device: Device) {
 		// Отправляем обновление только подписанным клиентам
@@ -380,13 +315,11 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 		const stats = {
 			totalClients: this.clientSubscriptions.size,
 			totalHeatingSubscriptions: 0,
-			totalTemperatureSensorSubscriptions: 0,
 			totalDeviceSubscriptions: 0,
 		};
 
 		this.clientSubscriptions.forEach(subscription => {
 			stats.totalHeatingSubscriptions += subscription.heating.size;
-			stats.totalTemperatureSensorSubscriptions += subscription.temperatureSensors.size;
 			stats.totalDeviceSubscriptions += subscription.devices.size;
 		});
 

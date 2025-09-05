@@ -5,7 +5,6 @@ import { SelectiveWebsocketModule } from './websocket/selective-websocket.module
 import { ConfigModule } from '@nestjs/config';
 import { MqttModule } from './mqtt/mqtt.module';
 import { HeatingModule } from './devices/heating/heating.module';
-import { TemperatureSensorModule } from './devices/temperature-sensor/temperature-sensor.module';
 
 @Module({
 	imports: [
@@ -19,7 +18,6 @@ import { TemperatureSensorModule } from './devices/temperature-sensor/temperatur
 		SelectiveWebsocketModule,
 		MqttModule,
 		HeatingModule,
-		TemperatureSensorModule,
 	],
 })
 export class AppModule {}

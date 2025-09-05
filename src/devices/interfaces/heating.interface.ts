@@ -48,13 +48,9 @@ export interface Heating extends Device {
 }
 
 export interface HeatingTopics {
-	DO_OPEN: string;
-	DO_CLOSE: string;
-	DO_PUMP_SPEED_1: string;
-	DO_PUMP_SPEED_2: string;
-	DO_PUMP_SPEED_3: string;
-	HEATING_CURR_TEMP: string;
-	ALARM: string;
+	VALVE_RELAY: string;  // Реле клапана (wb-mr6cu_XXX/K1)
+	FAN_DIMMER: string;   // Диммер вентилятора (wb-mao4_XXX/Channel 1 Dimming Level)
+	TEMPERATURE_SENSOR: string; // Датчик температуры (wb-msw-v4_XXX/Temperature)
 }
 
 export interface HeatingTemperatureSettings {
@@ -66,12 +62,14 @@ export interface HeatingTemperatureSettings {
 	TEMP_OVERHEAT_LIMIT: number;
 }
 
-export interface HeatingTimingSettings {
-	SETPOINT_CHANGE_TIMEOUT: number;
-	VALVE_OPEN_TIME: number;
-	VALVE_CLOSE_TIME: number;
-	VALVE_DELAY: number;
-	PUMP_SPEED_CHANGE_DELAY: number;
+export interface HeatingPIDSettings {
+	Kp: number;  // Коэффициент пропорциональности
+	Ki: number;  // Коэффициент интегральной составляющей
+	Kd: number;  // Коэффициент дифференциальной составляющей
+	outputMin: number;  // Минимальное значение выхода (0)
+	outputMax: number;  // Максимальное значение выхода (30)
+	integral: number;   // Интегральная составляющая
+	prevError: number;  // Предыдущая ошибка
 }
 
 export interface HeatingTemperatureSource {
@@ -82,27 +80,26 @@ export interface HeatingTemperatureSource {
 export interface HeatingConfig {
 	broker: string;
 	deviceName: string;
-	relayModule: string;
-	tempModule: string;
+	relayModule: string;      // wb-mr6cu модуль для реле
+	analogModule: string;     // wb-mao4 модуль для диммера
+	tempModule: string;       // wb-msw-v4 модуль для датчика температуры
 	deviceRealName: string;
 	temperatureSource?: HeatingTemperatureSource;
 	topics: HeatingTopics;
 	temperatureSettings: HeatingTemperatureSettings;
-	timingSettings: HeatingTimingSettings;
+	pidSettings: HeatingPIDSettings;
 }
 
 export interface HeatingState {
-	currentPumpSpeed: number;
-	isSpeedChanging: boolean;
-	valveState: 'open' | 'closed' | 'opening' | 'closing';
+	currentFanSpeed: number;      // Текущая скорость вентилятора (0-30)
+	valveState: 'open' | 'closed';
 	currentTemperature: number;
 	setpointTemperature: number;
-	isSetpointChanging: boolean;
-	lastSetpointChange: number;
+	pidOutput: number;            // Выход PID регулятора
 	isEmergencyStop: boolean;
-	isAlarm: boolean;
 	isWorking: boolean;
-	isStarting: boolean;
-	isStandingBy: boolean;
 	isOnline?: boolean;
+	autoControlEnabled?: boolean;
+	lastError?: number;
+	integral?: number;
 }
