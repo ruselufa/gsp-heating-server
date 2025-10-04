@@ -78,7 +78,7 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 	}
 
 	handleConnection(client: Socket) {
-		this.logger.log(`Client connected: ${client.id}`);
+		this.logger.log(`🔥 [SELECTIVE] Client connected: ${client.id}`);
 		
 		// Инициализируем подписки для нового клиента
 		this.clientSubscriptions.set(client.id, {
@@ -96,7 +96,7 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 	}
 
 	handleDisconnect(client: Socket) {
-		this.logger.log(`Client disconnected: ${client.id}`);
+		this.logger.log(`🔥 [SELECTIVE] Client disconnected: ${client.id}`);
 		
 		// Удаляем подписки клиента
 		this.clientSubscriptions.delete(client.id);
@@ -104,6 +104,7 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 
 	@SubscribeMessage('subscribeToHeating')
 	async handleHeatingSubscription(client: Socket, heatingIds: string[]) {
+		this.logger.log(`🔥 [SELECTIVE] Подписка на heating устройства: ${heatingIds.join(', ')}`);
 		const subscription = this.clientSubscriptions.get(client.id);
 		if (subscription) {
 			subscription.heating.clear();
@@ -197,7 +198,7 @@ export class SelectiveWebsocketGateway implements OnGatewayInit, OnGatewayConnec
 	async handleHeatingCommand(client: Socket, payload: HeatingCommand) {
 		try {
 			const { heatingId, command, value } = payload;
-			this.logger.log(`Получена команда для системы отопления ${heatingId}: ${command} = ${value}`);
+			this.logger.log(`🔥 [SELECTIVE] Получена команда для системы отопления ${heatingId}: ${command} = ${value}`);
 
 			switch (command) {
 				case 'TURN_ON':
