@@ -63,7 +63,7 @@ export class HeatingService implements OnModuleInit {
 					} else {
 						this.logger.warn(`❌ Invalid temperature data for ${heatingId}: ${data.message}`);
 					}
-					break;
+					// Убираем break, чтобы все ШУКи с одинаковым датчиком получали обновления
 				}
 			}
 		});
@@ -166,12 +166,24 @@ export class HeatingService implements OnModuleInit {
 
 		const { currentTemperature, setpointTemperature, pidState } = state;
 		const { Kp, Ki, Kd, outputMin, outputMax } = pidState;
+		const { HYSTERESIS } = config.temperatureSettings;
 
-		// Вычисляем ошибку
-		const error = setpointTemperature - currentTemperature;
+		// Вычисляем ошибку с учетом гистерезиса
+		let error = setpointTemperature - currentTemperature;
+		
+		// Применяем гистерезис для более плавной работы
+		if (state.isWorking && error < 0 && Math.abs(error) <= HYSTERESIS) {
+			// Если система работает и ошибка в пределах гистерезиса, 
+			// считаем ошибку равной 0 (не меняем режим)
+			error = 0;
+		}
 
-		// Обновляем интегральную составляющую
+		// Обновляем интегральную составляющую с антивиндовпом
 		pidState.integral += error;
+		
+		// Ограничиваем интегральную составляющую для предотвращения перерегулирования
+		const maxIntegral = 50; // Максимальное значение интеграла
+		pidState.integral = Math.max(-maxIntegral, Math.min(maxIntegral, pidState.integral));
 
 		// Вычисляем дифференциальную составляющую
 		const derivative = error - pidState.prevError;
@@ -179,14 +191,14 @@ export class HeatingService implements OnModuleInit {
 		// Вычисляем выход PID регулятора
 		let output = Kp * error + Ki * pidState.integral + Kd * derivative;
 
-		// Для отопления: если температура выше уставки, выход должен быть 0
+		// Ограничиваем выход в диапазоне outputMin - outputMax
+		output = Math.max(outputMin, Math.min(outputMax, output));
+
+		// Для отопления: если температура выше уставки, постепенно снижаем выход
+		// но не сбрасываем сразу в 0, чтобы избежать резких скачков
 		if (error < 0) {
-			output = 0;
-			// Сбрасываем интегральную составляющую при превышении температуры
-			pidState.integral = 0;
-		} else {
-			// Ограничиваем выход в диапазоне outputMin - outputMax только для положительных ошибок
-			output = Math.max(outputMin, Math.min(outputMax, output));
+			// Постепенно уменьшаем интегральную составляющую при превышении температуры
+			pidState.integral = Math.max(0, pidState.integral * 0.95); // Медленно сбрасываем интеграл
 		}
 
 		this.logger.debug(`PID Control ${heatingId}: error=${error.toFixed(2)}, output=${output.toFixed(2)}, valve=${this.getSeasonalValveState(heatingId, output) ? 'open' : 'closed'} (seasonal)`);
@@ -196,16 +208,18 @@ export class HeatingService implements OnModuleInit {
 		state.currentFanSpeed = output;
 		pidState.prevError = error;
 
-		// Отправляем команду вентилятору только если выход больше 15%
-		if (output >= 15) {
-			this.logger.log(`🔥 PID: Sending fan speed command for ${heatingId}: topic="${config.topics.FAN_DIMMER}/on", value=${output}`);
-			this.mqttService.publish(config.broker, `${config.topics.FAN_DIMMER}/on`, output, {
+		// Отправляем команду вентилятору с учетом минимального порога
+		const fanSpeed = Math.max(0, output);
+		
+		// Если выход очень мал (меньше 5%), отключаем вентилятор
+		if (fanSpeed < 15) {
+			this.logger.log(`🔥 PID: Fan speed too low (${fanSpeed.toFixed(1)}%), turning off fan for ${heatingId}`);
+			this.mqttService.publish(config.broker, `${config.topics.FAN_DIMMER}/on`, 0, {
 				retain: false,
 			});
 		} else {
-			// Если выход меньше 15%, отправляем 0
-			this.logger.log(`🔥 PID: Fan speed below threshold (${output}%), sending 0 for ${heatingId}`);
-			this.mqttService.publish(config.broker, `${config.topics.FAN_DIMMER}/on`, 0, {
+			this.logger.log(`🔥 PID: Sending fan speed command for ${heatingId}: topic="${config.topics.FAN_DIMMER}/on", value=${fanSpeed.toFixed(1)}`);
+			this.mqttService.publish(config.broker, `${config.topics.FAN_DIMMER}/on`, fanSpeed, {
 				retain: false,
 			});
 		}
