@@ -240,7 +240,7 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 					break;
 				case 'SET_TEMPERATURE':
 					if (value !== undefined) {
-						this.heatingService.setTemperature(heatingId, Number(value));
+						await this.heatingService.setTemperature(heatingId, Number(value));
 					}
 					break;
 				case 'SET_PUMP_SPEED':

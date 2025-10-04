@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MqttService } from '../../mqtt/mqtt.service';
+import { DatabaseService } from '../../database/database.service';
 import { heatingConfigs } from './heating.config';
 import { HeatingState, HeatingPIDSettings } from '../interfaces/heating.interface';
 
@@ -20,6 +21,7 @@ export class HeatingService implements OnModuleInit {
 	constructor(
 		private readonly mqttService: MqttService,
 		private readonly eventEmitter: EventEmitter2,
+		private readonly databaseService: DatabaseService,
 	) {
 		this.isDestroyed = false;
 		// Инициализация состояний для каждого отопительного контура
@@ -43,6 +45,9 @@ export class HeatingService implements OnModuleInit {
 
 	async onModuleInit() {
 		this.logger.log('Heating Service initialized');
+		
+		// Загружаем уставки из базы данных
+		await this.loadSettingsFromDatabase();
 
 		// Единый обработчик MQTT сообщений для брокера sensors
 		this.eventEmitter.on('mqtt.sensors.message', (data: { topic: string; message: any }) => {
@@ -270,8 +275,27 @@ export class HeatingService implements OnModuleInit {
 		this.logger.log(`Fan speed manually set to ${speed} for heating ${heatingId}`);
 	}
 
+	// Загрузка настроек из базы данных
+	private async loadSettingsFromDatabase() {
+		this.logger.log('Загружаем настройки отопления из базы данных...');
+		
+		for (const heatingId of Object.keys(this.states)) {
+			try {
+				const setpointStr = await this.databaseService.getHeatingSetting(heatingId, 'setpoint_temperature');
+				if (setpointStr) {
+					const setpoint = parseFloat(setpointStr);
+					if (!isNaN(setpoint)) {
+						this.states[heatingId].setpointTemperature = setpoint;
+						this.logger.log(`Загружена уставка для ${heatingId}: ${setpoint}°C`);
+					}
+				}
+			} catch (error) {
+				this.logger.error(`Ошибка загрузки настроек для ${heatingId}:`, error);
+			}
+		}
+	}
 
-	setTemperature(heatingId: string, temperature: number) {
+	async setTemperature(heatingId: string, temperature: number) {
 		const state = this.states[heatingId];
 		
 		if (!state) return;
@@ -284,7 +308,13 @@ export class HeatingService implements OnModuleInit {
 
 		state.setpointTemperature = temperature;
 
-		this.logger.log(`Heating ${heatingId} setpoint temperature set to: ${temperature}°C`);
+		// Сохраняем уставку в базу данных
+		try {
+			await this.databaseService.setHeatingSetting(heatingId, 'setpoint_temperature', temperature.toString());
+			this.logger.log(`Heating ${heatingId} setpoint temperature set to: ${temperature}°C and saved to database`);
+		} catch (error) {
+			this.logger.error(`Failed to save temperature setpoint to database for ${heatingId}:`, error);
+		}
 		
 		// Эмитируем событие изменения уставки температуры
 		this.eventEmitter.emit('heating.setpoint.changed', {

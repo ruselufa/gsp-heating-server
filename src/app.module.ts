@@ -5,6 +5,7 @@ import { SelectiveWebsocketModule } from './websocket/selective-websocket.module
 import { ConfigModule } from '@nestjs/config';
 import { MqttModule } from './mqtt/mqtt.module';
 import { HeatingModule } from './devices/heating/heating.module';
+import { DatabaseModule } from './database/database.module';
 
 @Module({
 	imports: [
@@ -14,6 +15,7 @@ import { HeatingModule } from './devices/heating/heating.module';
 			maxListeners: 100,
 			ignoreErrors: false,
 		}),
+		DatabaseModule,
 		WebsocketModule,
 		SelectiveWebsocketModule,
 		MqttModule,
