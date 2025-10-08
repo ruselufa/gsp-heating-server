@@ -20,9 +20,9 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				61: '/devices/wb-mr6cu_61/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				101: '/devices/wb-msw-v4_101/controls/Temperature', // DHT-45
+				// 101: '/devices/wb-msw-v4_101/controls/Temperature', // DHT-45
 				244: '/devices/wb-msw-v4_244/controls/Temperature', // DHT-46
-				30: '/devices/wb-msw-v4_30/controls/Temperature',   // DHT-47
+				// 30: '/devices/wb-msw-v4_30/controls/Temperature',   // DHT-47
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -50,8 +50,8 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				61: '/devices/wb-mr6cu_61/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				101: '/devices/wb-msw-v4_101/controls/Temperature', // DHT-45
-				244: '/devices/wb-msw-v4_244/controls/Temperature', // DHT-46
+				// 101: '/devices/wb-msw-v4_101/controls/Temperature', // DHT-45
+				// 244: '/devices/wb-msw-v4_244/controls/Temperature', // DHT-46
 				30: '/devices/wb-msw-v4_30/controls/Temperature',   // DHT-47
 			},
 		},
@@ -89,9 +89,9 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				75: '/devices/wb-mr6cu_75/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
-				97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
-				28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
+				// 96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
+				// 97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
+				// 28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
 				189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
 			},
 		},
@@ -120,10 +120,10 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				75: '/devices/wb-mr6cu_75/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
-				97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
+				// 96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
+				// 97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
 				28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
-				189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
+				// 189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -151,10 +151,10 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				75: '/devices/wb-mr6cu_75/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
+				// 96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
 				97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
-				28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
-				189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
+				// 28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
+				// 189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -183,9 +183,9 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 			},
 			TEMPERATURE_SENSORS: {
 				96: '/devices/wb-msw-v4_96/controls/Temperature',  // DHT-39
-				97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
-				28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
-				189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
+				// 97: '/devices/wb-msw-v4_97/controls/Temperature',  // DHT-40
+				// 28: '/devices/wb-msw-v4_28/controls/Temperature',  // DHT-41
+				// 189: '/devices/wb-msw-v4_189/controls/Temperature', // DHT-42
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -464,10 +464,10 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 			},
 			TEMPERATURE_SENSORS: {
 				49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
-				12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
-				66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
-				65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
-				55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
+				// 12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
+				// 66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
+				// 65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
+				// 55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -495,11 +495,11 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				90: '/devices/wb-mr6cu_90/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
+				// 49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
 				12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
-				66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
-				65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
-				55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
+				// 66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
+				// 65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
+				// 55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -527,11 +527,11 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				90: '/devices/wb-mr6cu_90/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
-				12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
+				// 49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
+				// 12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
 				66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
-				65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
-				55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
+				// 65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
+				// 55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -559,11 +559,11 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				90: '/devices/wb-mr6cu_90/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
-				12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
-				66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
+				// 49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
+				// 12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
+				// 66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
 				65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
-				55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
+				// 55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
 			},
 		},
 		temperatureSettings: defaultTemperatureSettings,
@@ -591,10 +591,10 @@ export const batteriesConfigs: Record<string, BatteriesConfig> = {
 				90: '/devices/wb-mr6cu_90/controls',
 			},
 			TEMPERATURE_SENSORS: {
-				49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
-				12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
-				66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
-				65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
+				// 49: '/devices/wb-msw-v4_49/controls/Temperature',  // DHT-09
+				// 12: '/devices/wb-msw-v4_12/controls/Temperature',  // DHT-10
+				// 66: '/devices/wb-msw-v4_66/controls/Temperature',  // DHT-11
+				// 65: '/devices/wb-msw-v4_65/controls/Temperature',  // DHT-12
 				55: '/devices/wb-msw-v4_55/controls/Temperature',  // DHT-13
 			},
 		},
