@@ -9,7 +9,7 @@ async function bootstrap() {
 	});
 
 	app.enableCors({
-		origin: ['http://localhost:5173', 'http://localhost:3000'],
+		origin: ['http://localhost:5173', 'http://localhost:3000', 'http://192.168.1.16:5173', 'http://192.168.1.16:3000'],
 		methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 		allowedHeaders: ['Content-Type', 'Authorization'],
 		credentials: true,

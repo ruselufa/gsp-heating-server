@@ -12,11 +12,21 @@ import { Device } from '../devices/interfaces/device.interface';
 import { Logger } from '@nestjs/common';
 import { HeatingState } from '../devices/interfaces/heating.interface';
 import { HeatingService } from '../devices/heating/heating.service';
+import { BatteriesState } from '../devices/interfaces/batteries.interface';
+import { BatteriesService } from '../devices/batteries/batteries.service';
 
 interface HeatingCommand {
 	heatingId: string;
 	command: 'TURN_ON' | 'TURN_OFF' | 'SET_TEMPERATURE' | 'SET_PUMP_SPEED' | 'SET_VALVE' | 'EMERGENCY_STOP';
 	value?: string | number;
+}
+
+interface BatteriesCommand {
+	deviceId: string;
+	command: 'set_temperature' | 'enable_auto_control' | 'disable_auto_control' | 'set_group_valve' | 'emergency_stop' | 'reset_emergency_stop';
+	temperature?: number;
+	groupName?: string;
+	open?: boolean;
 }
 
 @WebSocketGateway({
@@ -34,6 +44,7 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 	constructor(
 		private readonly eventEmitter: EventEmitter2,
 		private readonly heatingService: HeatingService,
+		private readonly batteriesService: BatteriesService,
 	) {
 		// Подписываемся на события обновления устройств отопления
 		this.eventEmitter.on('device.updated', (device: Device) => this.handleDeviceUpdate(device));
@@ -70,6 +81,36 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 		this.eventEmitter.on('heating.pid.updated', (data: { heatingId: string; error: number; output: number }) =>
 			this.handleHeatingPIDUpdate(data),
 		);
+
+		// События системы батарей
+		this.eventEmitter.on('batteries.temperature.updated', (data: { deviceId: string; temperature: number }) => {
+			this.handleBatteriesTemperatureUpdate(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.setpoint.changed', (data: { deviceId: string; temperature: number }) => {
+			this.handleBatteriesSetpointUpdate(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.valve.state.changed', (data: { deviceId: string; groupName: string; state: string }) => {
+			this.handleBatteriesValveUpdate(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.emergency.stop', (data: { deviceId: string }) => {
+			this.handleBatteriesEmergencyStop(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.emergency.stop.reset', (data: { deviceId: string }) => {
+			this.handleBatteriesEmergencyStopReset(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.auto.control.enabled', (data: { deviceId: string }) => {
+			this.handleBatteriesAutoControlEnabled(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
+		this.eventEmitter.on('batteries.auto.control.disabled', (data: { deviceId: string }) => {
+			this.handleBatteriesAutoControlDisabled(data);
+			this.handleBatteriesStateUpdate(data.deviceId);
+		});
 	}
 
 	afterInit() {
@@ -274,6 +315,113 @@ export class WebsocketGateway implements OnGatewayInit, OnGatewayConnection, OnG
 				error: error.message,
 				timestamp: new Date().toISOString(),
 			});
+		}
+	}
+
+	// Обработчики сообщений для батарей
+	@SubscribeMessage('get-batteries-states')
+	async handleGetBatteriesStates(client: Socket) {
+		try {
+			const states = this.batteriesService.getAllStates();
+			client.emit('batteries-states', states);
+		} catch (error) {
+			this.logger.error(`Ошибка получения состояний батарей: ${error.message}`);
+		}
+	}
+
+	@SubscribeMessage('get-batteries-configs')
+	async handleGetBatteriesConfigs(client: Socket) {
+		try {
+			const configs = this.batteriesService.getAllConfigs();
+			client.emit('batteries-configs', configs);
+		} catch (error) {
+			this.logger.error(`Ошибка получения конфигураций батарей: ${error.message}`);
+		}
+	}
+
+	@SubscribeMessage('batteries-command')
+	async handleBatteriesCommand(client: Socket, payload: BatteriesCommand) {
+		try {
+			const { deviceId, command, temperature, groupName, open } = payload;
+			this.logger.log(`🔋 [MAIN] Получена команда для батарей ${deviceId}: ${command}`);
+
+			switch (command) {
+				case 'set_temperature':
+					if (temperature !== undefined) {
+						await this.batteriesService.setTemperature(deviceId, temperature);
+					}
+					break;
+				case 'enable_auto_control':
+					this.batteriesService.enableAutoControl(deviceId);
+					break;
+				case 'disable_auto_control':
+					this.batteriesService.disableAutoControl(deviceId);
+					break;
+				case 'set_group_valve':
+					if (groupName !== undefined && open !== undefined) {
+						this.batteriesService.setGroupValveManually(deviceId, groupName, open);
+					}
+					break;
+				case 'emergency_stop':
+					this.batteriesService.emergencyStop(deviceId);
+					break;
+				case 'reset_emergency_stop':
+					this.batteriesService.resetEmergencyStop(deviceId);
+					break;
+				default:
+					this.logger.warn(`Неизвестная команда для батарей ${deviceId}: ${command}`);
+			}
+
+			// Отправляем подтверждение команды
+			client.emit('batteries-command:success', {
+				deviceId,
+				command,
+				timestamp: new Date().toISOString(),
+			});
+		} catch (error) {
+			this.logger.error(`Ошибка обработки команды батарей: ${error.message}`);
+			client.emit('batteries-command:error', {
+				deviceId: payload.deviceId,
+				command: payload.command,
+				error: error.message,
+				timestamp: new Date().toISOString(),
+			});
+		}
+	}
+
+	// Обработчики событий батарей
+	private handleBatteriesTemperatureUpdate(data: { deviceId: string; temperature: number }) {
+		this.server.emit('batteries-temperature-update', data);
+	}
+
+	private handleBatteriesSetpointUpdate(data: { deviceId: string; temperature: number }) {
+		this.server.emit('batteries-setpoint-update', data);
+	}
+
+	private handleBatteriesValveUpdate(data: { deviceId: string; groupName: string; state: string }) {
+		this.server.emit('batteries-valve-update', data);
+	}
+
+	private handleBatteriesEmergencyStop(data: { deviceId: string }) {
+		this.server.emit('batteries-emergency-stop', data);
+	}
+
+	private handleBatteriesEmergencyStopReset(data: { deviceId: string }) {
+		this.server.emit('batteries-emergency-stop-reset', data);
+	}
+
+	private handleBatteriesAutoControlEnabled(data: { deviceId: string }) {
+		this.server.emit('batteries-auto-control-enabled', data);
+	}
+
+	private handleBatteriesAutoControlDisabled(data: { deviceId: string }) {
+		this.server.emit('batteries-auto-control-disabled', data);
+	}
+
+	private handleBatteriesStateUpdate(deviceId: string) {
+		const state = this.batteriesService.getState(deviceId);
+		if (state) {
+			this.server.emit('batteries-state-update', { deviceId, state });
 		}
 	}
 
