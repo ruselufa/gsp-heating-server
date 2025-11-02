@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ModbusSlaveService } from './modbus-slave.service';
+import { ModbusController } from './modbus.controller';
 import { HeatingModule } from '../devices/heating/heating.module';
 
 /**
@@ -8,6 +9,7 @@ import { HeatingModule } from '../devices/heating/heating.module';
  */
 @Module({
 	imports: [HeatingModule],
+	controllers: [ModbusController],
 	providers: [ModbusSlaveService],
 	exports: [ModbusSlaveService],
 })

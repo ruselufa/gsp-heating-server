@@ -146,7 +146,14 @@ export class ModbusRegistersMapper {
 	private syncInputRegisters(unitId: number, state: HeatingState): void {
 		// Адрес 0: CURRENT_TEMP (x10)
 		const currentTemp = toInt16(applyScale(state.currentTemperature ?? 0, 10));
+		this.logger.debug(`Writing to Unit ${unitId} Input Register 0: ${currentTemp} (temp=${state.currentTemperature}°C)`);
 		this.memoryManager.writeRegister(unitId, ModbusAreaType.INPUT_REGISTERS, 0, currentTemp);
+		
+		// Проверяем, что записалось правильно
+		const writtenValue = this.memoryManager.readRegister(unitId, ModbusAreaType.INPUT_REGISTERS, 0);
+		if (writtenValue !== currentTemp) {
+			this.logger.error(`❌ Unit ${unitId}: Written ${currentTemp} but read back ${writtenValue}!`);
+		}
 
 		// Адрес 1: CURRENT_FAN_SPEED
 		const fanSpeed = toUint16(state.currentFanSpeed ?? 0);
@@ -159,6 +166,21 @@ export class ModbusRegistersMapper {
 		// Адрес 3: PID_OUTPUT (x10)
 		const pidOutput = toInt16(applyScale(state.pidOutput ?? 0, 10));
 		this.memoryManager.writeRegister(unitId, ModbusAreaType.INPUT_REGISTERS, 3, pidOutput);
+
+		// Адрес 4: STATUS_WORD (статусное слово для чтения по битам)
+		// Формируем статусное слово из тех же битов, что и в Discrete Inputs
+		let statusWord = 0;
+		statusWord = setBit(statusWord, 0, state.isOnline ?? false);                    // IS_ONLINE
+		statusWord = setBit(statusWord, 1, state.isWorking ?? false);                 // IS_WORKING
+		statusWord = setBit(statusWord, 2, state.isEmergencyStop ?? false);           // IS_EMERGENCY_STOP
+		statusWord = setBit(statusWord, 3, false);                                     // TEMP_SENSOR_ERROR (можно добавить логику)
+		statusWord = setBit(statusWord, 4, state.autoControlEnabled ?? false);       // PID_ACTIVE
+		statusWord = setBit(statusWord, 5, false);                                      // FREEZE_PROTECTION (можно добавить логику)
+		statusWord = setBit(statusWord, 6, false);                                      // OVERHEAT_PROTECTION (можно добавить логику)
+		statusWord = setBit(statusWord, 7, state.valveState === 'open');               // VALVE_OPEN
+		// Биты 8-15: резерв (0)
+		
+		this.memoryManager.writeRegister(unitId, ModbusAreaType.INPUT_REGISTERS, 4, statusWord);
 	}
 
 	/**
@@ -179,8 +201,10 @@ export class ModbusRegistersMapper {
 		this.memoryManager.writeRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 4, toInt16(applyScale(5, 10)));  // TEMP_FREEZE_LIMIT
 		this.memoryManager.writeRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 5, toInt16(applyScale(35, 10))); // TEMP_OVERHEAT_LIMIT
 
-		// Адрес 10-12: COMMAND регистры (очищаем после выполнения)
-		// Они будут установлены при получении команды от OPC
+		// Адрес 10: COMMAND регистр (битовое управляющее слово)
+		// Бит 1 (2) = ENABLE_AUTO_CONTROL, Бит 2 (4) = DISABLE_AUTO_CONTROL
+		// Регистр очищается автоматически после выполнения команды
+		// Адреса 11-12: не используются для битовых команд
 
 		// Адреса 20-24: DEVICE_NAME (строка)
 		const deviceName = deviceId;
@@ -208,10 +232,21 @@ export class ModbusRegistersMapper {
 		// Обрабатываем изменения в Holding Registers
 		switch (address) {
 			case 0: // SETPOINT_TEMP
+				const rawValue = value;
+				const int16Value = fromInt16(rawValue);
+				const temperature = removeScale(int16Value, 10);
+				this.logger.debug(`SETPOINT_TEMP conversion: raw=${rawValue}, int16=${int16Value}, temp=${temperature}°C`);
+				
+				// Валидация преобразованного значения
+				if (isNaN(temperature) || !isFinite(temperature)) {
+					this.logger.error(`Invalid temperature after conversion: raw=${rawValue}, temp=${temperature}`);
+					return null;
+				}
+				
 				return {
 					deviceId,
 					parameter: 'setpointTemperature',
-					value: removeScale(fromInt16(value), 10)
+					value: temperature
 				};
 
 			case 1: // HYSTERESIS
@@ -266,7 +301,7 @@ export class ModbusRegistersMapper {
 	}
 
 	/**
-	 * Прочитать команду из COMMAND регистра
+	 * Прочитать команду из COMMAND регистра (битовое управляющее слово)
 	 * @param unitId - Unit ID
 	 * @returns объект команды или null
 	 */
@@ -281,19 +316,35 @@ export class ModbusRegistersMapper {
 			return null;
 		}
 
-		const command = this.memoryManager.readRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 10) ?? 0;
+		const commandWord = this.memoryManager.readRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 10) ?? 0;
 		const param1 = this.memoryManager.readRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 11) ?? 0;
 		const param2 = this.memoryManager.readRegister(unitId, ModbusAreaType.HOLDING_REGISTERS, 12) ?? 0;
 
-		if (command === 0) {
-			return null; // NOP
+		if (commandWord === 0) {
+			return null; // NOP (все биты = 0)
+		}
+
+		// Определяем команду на основе установленных битов
+		// Бит 1 (2) = ENABLE_AUTO_CONTROL
+		// Бит 2 (4) = DISABLE_AUTO_CONTROL
+		let command: number = 0;
+		
+		if (commandWord & 4) {
+			// Бит 2 установлен = DISABLE_AUTO_CONTROL (приоритет выше)
+			command = 4; // DISABLE_AUTO_CONTROL
+		} else if (commandWord & 2) {
+			// Бит 1 установлен = ENABLE_AUTO_CONTROL
+			command = 2; // ENABLE_AUTO_CONTROL
+		} else {
+			// Другие биты - неизвестная команда
+			return null;
 		}
 
 		return {
 			deviceId,
 			command,
-			param1,
-			param2
+			param1, // Не используются для битовых команд
+			param2  // Не используются для битовых команд
 		};
 	}
 

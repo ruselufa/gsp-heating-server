@@ -55,16 +55,25 @@ export class HeatingService implements OnModuleInit {
 			this.logger.log(`🔥 Получено MQTT сообщение: ${data.topic}, ${data.message}`);
 
 			// Ищем отопление, которому соответствует топик
+			let matchedCount = 0;
 			for (const [heatingId, config] of Object.entries(heatingConfigs)) {
 				if (data.topic === config.topics.TEMPERATURE_SENSOR) {
 					const temperature = parseFloat(String(data.message));
 					if (!isNaN(temperature)) {
+						this.logger.log(`  ✅ MQTT topic ${data.topic} matched to ${heatingId}, updating temperature: ${temperature}°C`);
 						this.updateTemperature(heatingId, temperature);
+						matchedCount++;
 					} else {
 						this.logger.warn(`❌ Invalid temperature data for ${heatingId}: ${data.message}`);
 					}
 					// Убираем break, чтобы все ШУКи с одинаковым датчиком получали обновления
 				}
+			}
+			
+			if (matchedCount === 0) {
+				this.logger.warn(`⚠️  MQTT topic ${data.topic} not matched to any heating device`);
+			} else if (matchedCount > 1) {
+				this.logger.warn(`⚠️  MQTT topic ${data.topic} matched to ${matchedCount} devices (may cause duplicate updates)`);
 			}
 		});
 
@@ -87,7 +96,7 @@ export class HeatingService implements OnModuleInit {
 				currentFanSpeed: 0,
 				valveState: 'closed',
 				currentTemperature: 0,
-				setpointTemperature: 20,
+				setpointTemperature: 23,
 				pidOutput: 0,
 				isEmergencyStop: false,
 				isWorking: false,

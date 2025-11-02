@@ -136,6 +136,14 @@ export const HEATING_VARIABLES_TEMPLATE: ModbusVariable[] = [
 		scale: 10,
 		access: 'R'
 	},
+	{
+		name: 'STATUS_WORD',
+		area: ModbusAreaType.INPUT_REGISTERS,
+		address: 4,
+		dataType: 'uint16',
+		description: 'Статусное слово (биты 0-7: IS_ONLINE, IS_WORKING, IS_EMERGENCY_STOP, TEMP_SENSOR_ERROR, PID_ACTIVE, FREEZE_PROTECTION, OVERHEAT_PROTECTION, VALVE_OPEN)',
+		access: 'R'
+	},
 	
 	// ========== HOLDING REGISTERS (Read/Write) - Уставки и команды ==========
 	{
@@ -281,7 +289,7 @@ export const MODBUS_HEATING_PORT = 8503;
 export const MEMORY_SIZES = {
 	DISCRETE_INPUTS: 16,      // 16 бит
 	COILS: 16,                // 16 бит
-	INPUT_REGISTERS: 10,      // 10 регистров
+	INPUT_REGISTERS: 10,      // 10 регистров (0-3: данные, 4: статусное слово, 5-9: резерв)
 	HOLDING_REGISTERS: 30,    // 30 регистров
 };
 
