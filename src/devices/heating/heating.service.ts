@@ -182,8 +182,13 @@ export class HeatingService implements OnModuleInit {
 		pidState.integral += error;
 		
 		// Ограничиваем интегральную составляющую для предотвращения перерегулирования
-		const maxIntegral = 50; // Максимальное значение интеграла
-		pidState.integral = Math.max(-maxIntegral, Math.min(maxIntegral, pidState.integral));
+		// const maxIntegral = 200; // Максимальное значение интеграла
+		// pidState.integral = Math.max(-maxIntegral, Math.min(maxIntegral, pidState.integral));
+
+		// Сбрасываем интеграл при превышении температуры
+		if (error < 0) {
+			pidState.integral = Math.max(0, pidState.integral * 0.95);
+		}
 
 		// Вычисляем дифференциальную составляющую
 		const derivative = error - pidState.prevError;

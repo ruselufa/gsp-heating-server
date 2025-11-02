@@ -151,4 +151,27 @@ export class HeatingController {
 			return { success: false, message: `Error sending test MQTT: ${error.message}` };
 		}
 	}
+
+	@Post(':heatingId/test-modbus-sync')
+	testModbusSync(@Param('heatingId') heatingId: string) {
+		try {
+			// Принудительно генерируем событие для синхронизации с Modbus
+			const state = this.heatingService.getState(heatingId);
+			if (state) {
+				// Генерируем событие обновления
+				this.heatingService['eventEmitter'].emit('heating.update', heatingId);
+				return { 
+					success: true, 
+					message: `Forced Modbus sync for ${heatingId}`, 
+					currentTemp: state.currentTemperature,
+					setpointTemp: state.setpointTemperature,
+					isOnline: state.isOnline
+				};
+			} else {
+				return { success: false, message: `No state found for ${heatingId}` };
+			}
+		} catch (error) {
+			return { success: false, message: `Error testing Modbus sync: ${error.message}` };
+		}
+	}
 }

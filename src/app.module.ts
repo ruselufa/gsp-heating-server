@@ -7,6 +7,7 @@ import { MqttModule } from './mqtt/mqtt.module';
 import { HeatingModule } from './devices/heating/heating.module';
 import { BatteriesModule } from './devices/batteries/batteries.module';
 import { DatabaseModule } from './database/database.module';
+import { ModbusSlaveModule } from './modbus/modbus-slave.module';
 
 @Module({
 	imports: [
@@ -22,6 +23,7 @@ import { DatabaseModule } from './database/database.module';
 		MqttModule,
 		HeatingModule,
 		BatteriesModule,
+		ModbusSlaveModule,
 	],
 })
 export class AppModule {}
