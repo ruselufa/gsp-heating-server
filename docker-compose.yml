@@ -1,50 +1,23 @@
-version: '3.8'
-
 services:
   gsp-heating-server:
+    container_name: gsp-heating-server
     build: .
-    ports:
-      - "3001:3001"
+    network_mode: host
     environment:
-      - NODE_ENV=production
-      - MQTT_BROKER_URL=mqtt://mqtt-broker:1883
-      - MQTT_USERNAME=${MQTT_USERNAME}
-      - MQTT_PASSWORD=${MQTT_PASSWORD}
-    depends_on:
-      - mqtt-broker
+      - PORT=${PORT:-3007}
+      - MODBUS_HEATING_PORT=${MODBUS_HEATING_PORT:-8503}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-gsp_db}
+      - DB_USER=${DB_USER:-gsp_user}
+      - DB_PASSWORD=${DB_PASSWORD:-gsp_password}
+    # ports:
+    #   - "3007:3007"
+    #   - "8503:8503"
     restart: unless-stopped
-    networks:
-      - gsp-network
-
-  mqtt-broker:
-    image: eclipse-mosquitto:2.0
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - mqtt-data:/mosquitto/data
-      - mqtt-logs:/mosquitto/log
-    restart: unless-stopped
-    networks:
-      - gsp-network
-
-  # Опционально: Redis для кэширования
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-    networks:
-      - gsp-network
-
-volumes:
-  mqtt-data:
-  mqtt-logs:
-  redis-data:
+    # networks:
+    #   - gsp-net
 
 networks:
-  gsp-network:
-    driver: bridge
+  gsp-net:
+    external: true
